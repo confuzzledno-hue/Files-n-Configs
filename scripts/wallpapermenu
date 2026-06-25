@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+FOLDER="$HOME/wallpapers"
+SCRIPT="$HOME/scripts/wal-set"
+
+menu() {
+  # 1. Fail fast if required tools are missing
+  command -v dmenu >/dev/null 2>&1 || {
+    echo "Error: dmenu is not installed." >&2
+    exit 1
+  }
+  command -v wal >/dev/null 2>&1 || {
+    echo "Error: pywal (wal) is not installed." >&2
+    exit 1
+  }
+
+  # 2. Instantly source pywal cache directly
+  [[ -f "$HOME/.cache/wal/colors.sh" ]] && . "$HOME/.cache/wal/colors.sh"
+
+  # 3. Native Bash array for style definitions
+  local dmenu_args=(
+    -c -l 15 -i -p "Wallpaper: "
+    -nb "${color0:-#222222}"
+    -nf "${color15:-#bbbbbb}"
+    -sb "${color1:-#005577}"
+    -sf "${color15:-#eeeeee}"
+  )
+
+  # 4. Safe, localized directory traversal and precise image matching
+  if cd "$FOLDER" 2>/dev/null; then
+    # Enable safe globbing variables locally
+    shopt -s nullglob nocaseglob
+
+    # Populate an array with matched extensions
+    local files=(*.png *.jpg *.jpeg *.webp)
+
+    # Restore glob settings immediately
+    shopt -u nullglob nocaseglob
+
+    # Verify the directory actually contains images
+    if ((${#files[@]} == 0)); then
+      echo "Error: No compatible images found in $FOLDER" >&2
+      exit 1
+    fi
+
+    # Stream the array instantly into dmenu
+    local choice
+    choice=$(printf '%s\n' "${files[@]}" | dmenu "${dmenu_args[@]}")
+  else
+    echo "Error: Wallpaper directory '$FOLDER' does not exist." >&2
+    exit 1
+  fi
+
+  # 5. Execute only if a selection was actively made
+  [[ -n "$choice" ]] && wal -i "$FOLDER/$choice" -o "$SCRIPT"
+}
+
+# Optimized argument routing using explicit matching
+case "$#" in
+0) menu ;;
+1) [[ -f "$1" ]] && wal -i "$1" -o "$SCRIPT" || {
+  echo "Error: File '$1' not found." >&2
+  exit 1
+} ;;
+2) [[ -f "$1" ]] && wal -i "$1" --theme "$2" -o "$SCRIPT" || {
+  echo "Error: File '$1' not found." >&2
+  exit 1
+} ;;
+*)
+  echo "Usage: $0 [wallpaper_path] [theme]" >&2
+  exit 1
+  ;;
+esac

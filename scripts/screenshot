@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export DISPLAY="${DISPLAY:-:0}"
+
+# Safe argument handling to satisfy 'set -u'
+MODE="${1:-}"
+OUTDIR="${2:-}"
+: "${OUTDIR:=$HOME/Screenshots}"
+mkdir -p "$OUTDIR"
+
+# Check dependencies based on selected execution path
+DEPS=(xclip notify-send)
+[[ "$MODE" == *"color"* ]] && DEPS+=(magick)
+[[ "$MODE" == "window" ]] && DEPS+=(xdotool)
+[[ "${WATERMARK:-}" == "1" ]] && DEPS+=(magick)
+
+for cmd in "${DEPS[@]}"; do
+  command -v "$cmd" &>/dev/null || {
+    echo "Missing dependency: $cmd" >&2
+    exit 1
+  }
+done
+
+FILE="$OUTDIR/$(date +%Y%m%d_%H%M%S).png"
+TMP=$(mktemp --suffix=.png)
+trap 'rm -f "$TMP"' EXIT
+
+show_help() {
+  cat <<EOF
+Usage: $(basename "$0") [color|full|window|help|-h|--help] [output_dir]
+
+Environment options:
+  WATERMARK=1
+  WATERMARK_TEXT='text'
+  WATERMARK_POS=position
+  WATERMARK_SIZE=px
+  WATERMARK_BG='#rrggbbaa'
+EOF
+}
+
+post() {
+  if [[ "${WATERMARK:-}" == "1" ]]; then
+    magick "$FILE" \
+      -gravity "${WATERMARK_POS:-southeast}" \
+      -pointsize "${WATERMARK_SIZE:-28}" \
+      -fill white -undercolor "${WATERMARK_BG:-#00000080}" \
+      -annotate +20+20 "${WATERMARK_TEXT:-$(date '+%Y-%m-%d %H:%M')}" \
+      "$FILE"
+  fi
+  xclip -selection clipboard -t image/png -i "$FILE" && notify-send -i "$FILE" "Screenshot: $(basename "$FILE")"
+
+  if command -v imgcliphist &>/dev/null; then
+    imgcliphist add
+  fi
+}
+
+colorpicker() {
+  if command -v slop &>/dev/null; then
+    # Capture geometry safely first to avoid breaking import
+    geom=$(slop --tolerance=0 2>/dev/null) || exit 0
+    magick import -window root -crop "$geom" "$TMP"
+  else
+    magick import -descend -frame "$TMP"
+  fi
+
+  hex=$(magick "$TMP" -scale 1x1\! -format "#%[hex:p{0,0}]" info: 2>/dev/null || echo "#??????")
+  echo "$hex" | xclip -selection clipboard -i && notify-send -i "$TMP" "Color: $hex"
+}
+
+capture_full() {
+  magick import -window root "$FILE" && post
+}
+
+capture_window() {
+  magick import -window "$(xdotool getwindowfocus)" "$FILE" && post
+}
+
+capture_selection() {
+  magick import "$FILE" && post
+}
+
+main() {
+  case "$MODE" in
+  -h | --help | help) show_help ;;
+  color*) colorpicker ;;
+  full) capture_full ;;
+  window) capture_window ;;
+  *) capture_selection ;;
+  esac
+}
+
+main

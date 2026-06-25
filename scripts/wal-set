@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+ln -sf ~/.cache/wal/colors.Xresources ~/.Xresources
+ln -sf ~/.cache/wal/dunstrc ~/.config/dunst/dunstrc
+
+cat ~/.Xresources ~/.cache/wal/xrdb_extra | xrdb -merge
+xdotool key alt+ctrl+backslash # xrdb refresh keybind
+
+pkill dunst
+setsid -f dunst
+
+notify-send "Wallpaper and colorscheme set!"

@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+
+# Global configuration
+folder="$HOME/notes"
+TERMINAL="${TERMINAL:-st}"
+EDITOR="${EDITOR:-nvim}"
+
+# Ensure notes directory exists immediately
+mkdir -p "$folder" || {
+  echo "Error: Could not create $folder" >&2
+  exit 1
+}
+
+# 1. Instantly source pywal cache directly
+[[ -f "$HOME/.cache/wal/colors.sh" ]] && . "$HOME/.cache/wal/colors.sh"
+
+# 2. Native Bash array for dmenu flags (Each flag must be its own element)
+dmenu_args=(
+  "-c" "-l" "5" "-i"
+  "-nb" "${color0:-#222222}"
+  "-nf" "${color15:-#bbbbbb}"
+  "-sb" "${color1:-#a3be8c}"
+  "-sf" "${color15:-#eeeeee}"
+)
+
+newnote() {
+  command -v dmenu >/dev/null 2>&1 || {
+    echo "Error: dmenu not found." >&2
+    exit 1
+  }
+
+  # Native directory mapping
+  shopt -s nullglob
+  local dirs=("$folder" "$folder"/*/)
+  shopt -u nullglob
+
+  # Strip trailing slashes (for clean rendering in dmenu)
+  local display_dirs=()
+  for d in "${dirs[@]}"; do
+    display_dirs+=("${d%/}")
+  done
+
+  # Choose directory (using pywal theme)
+  local target_dir
+  target_dir=$(printf '%s\n' "${display_dirs[@]}" | dmenu "${dmenu_args[@]}" -p 'Choose directory: ') || exit 0
+  : "${target_dir:=$folder}"
+
+  # Prompt user for filename
+  local note_name
+  note_name=$(dmenu "${dmenu_args[@]}" -p "Enter a name: " </dev/null) || exit 0
+  : "${note_name:=$(date +%F_%H-%M-%S)}"
+
+  # Clean path joining
+  local target_file="${target_dir}/${note_name}"
+  [[ "$target_file" != *.md ]] && target_file+=".md"
+
+  setsid -f "$TERMINAL" -e "$EDITOR" "$target_file" >/dev/null 2>&1
+}
+
+selected() {
+  command -v dmenu >/dev/null 2>&1 || {
+    echo "Error: dmenu not found." >&2
+    exit 1
+  }
+
+  # Fast file search (relative paths)
+  local note_list
+  note_list=$(find "$folder" -maxdepth 3 -type f -name "*.md" -printf '%T@ %P\n' 2>/dev/null | sort -nr | cut -d' ' -f2-)
+
+  # Choose note (using pywal theme)
+  local choice
+  choice=$(printf 'New\n%s\n' "$note_list" | dmenu "${dmenu_args[@]}" -p "Choose note or create new: ") || exit 0
+
+  case "$choice" in
+  "New" | "")
+    newnote
+    ;;
+  *)
+    local full_path="$folder/$choice"
+    if [[ -f "$full_path" ]]; then
+      setsid -f "$TERMINAL" -e "$EDITOR" "$full_path" >/dev/null 2>&1
+    else
+      echo "Error: Targeted file no longer exists." >&2
+      exit 1
+    fi
+    ;;
+  esac
+}
+
+# Entrypoint
+selected
