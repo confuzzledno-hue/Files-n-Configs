@@ -1,0 +1,21 @@
+{
+    "appearance": {
+        "transparency": {
+            "enabled": true
+        }
+    },
+    "background": {
+        "desktopClock": {
+            "enabled": true,
+            "position": "top-right",
+            "scale": 0.8
+        },
+        "enabled": true,
+        "visualiser": {
+            "enabled": true
+        }
+    },
+    "services": {
+        "useFahrenheit": false
+    }
+}
